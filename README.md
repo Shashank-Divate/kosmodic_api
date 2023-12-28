@@ -1,2 +1,2 @@
-# kosmodic_api
+# Kosmodic Api
 Doctors Application
