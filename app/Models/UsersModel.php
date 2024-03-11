@@ -10,8 +10,8 @@ class UsersModel extends Model
     use HasFactory;
 
     protected $table = "users";
-    protected $fillable = ['full_name', 'username', 'email_id', 'contact_number', 'dob', 'gender', 'password'];
-    protected $hidden = ['password', 'created_at', 'updated_at'];
+    protected $fillable = ['full_name', 'username', 'email_id', 'contact_number', 'dob', 'otp', 'is_profile_completed'];
+    protected $hidden = ['created_at', 'updated_at'];
 
     public function create_user($data)
     {

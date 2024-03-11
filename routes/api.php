@@ -29,9 +29,7 @@ Route::get('clear', function(){
     return "Cleared!";
 });
 
-// Routes :: To create a new user
-Route::post('/verify_user_email', [UserController::class, 'verifyUserEmail']);
-Route::post('/create_user', [UserController::class, 'createUser']);
-
-// Routes :: User Login
+// Routes :: User Routes (Patient)
 Route::post('/user_login', [UserController::class, 'userLogin']);
+Route::post('/verify_user_otp', [UserController::class, 'verifyUserOTP']);
+Route::post('/user_update_profile', [UserController::class, 'userUpdateProfile']);
