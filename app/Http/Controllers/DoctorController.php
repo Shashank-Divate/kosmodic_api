@@ -280,6 +280,7 @@ class DoctorController extends Controller
                     'hosptial_starts_at' => $data['hosptial_starts_at'],
                     'hospital_ends_at' => $data['hospital_ends_at'],
                     'consultation_fees' => $data['consultation_fees'],
+                    'is_profile_completed' => 1,
                 );
 
                 // Update User Data Query
