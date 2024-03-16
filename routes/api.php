@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\DoctorController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
@@ -33,3 +34,8 @@ Route::get('clear', function(){
 Route::post('/user_login', [UserController::class, 'userLogin']);
 Route::post('/verify_user_otp', [UserController::class, 'verifyUserOTP']);
 Route::post('/user_update_profile', [UserController::class, 'userUpdateProfile']);
+
+// Routes:: Doctor Routes
+Route::post('/doctor_login', [DoctorController::class, 'doctorLogin']);
+Route::post('/verify_doctor_otp', [DoctorController::class, 'verifyDoctorOTP']);
+Route::post('/doctor_update_profile', [DoctorController::class, 'doctorUpdateProfile']);
