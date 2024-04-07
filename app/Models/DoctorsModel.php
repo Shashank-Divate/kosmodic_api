@@ -16,6 +16,7 @@ class DoctorsModel extends Model
     public function create_doctor($data)
     {
         $result = DoctorsModel::create($data);
+        
         return $result;
     }
 
@@ -25,6 +26,14 @@ class DoctorsModel extends Model
             ->where($queryCondition)
             ->first();
         
+        return $result;
+    }
+
+    public function get_doctors()
+    {
+        $result = DoctorsModel::select('doctors.*')
+                ->get();
+
         return $result;
     }
 

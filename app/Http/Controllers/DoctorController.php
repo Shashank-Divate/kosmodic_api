@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use App\Helpers\TokenHelper;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 
 class DoctorController extends Controller
@@ -182,14 +183,15 @@ class DoctorController extends Controller
 
                     //Token Payload Data 
                     $payload = array(
-                        'doctor_info' => $doctor_info
+                        'doctor_info' => $doctor_info,
+                        'user_role' => 'doctor' // This defines the type of user who is logging into application
                     );
 
                     // Generate Token
                     $token = TokenHelper::generateToken($payload);
 
-                    // Add this generated token into user_info array
-                    $user_info['token'] = $token;
+                    // Add this generated token into doctor_info array
+                    $doctor_info['token'] = $token;
 
                     $result = array(
                         'success' => true,
@@ -242,7 +244,7 @@ class DoctorController extends Controller
         // First get all the data sent from the client side
         $data = $request->all();
 
-        // Next, validate these fields since these fields are mandatory to be filled by the user & they are used to create a new user
+        // Next, validate these fields since these fields are mandatory to be filled by the doctor & they are used to create a new doctor
         $rules = array(
             'full_name' => 'required',
             'education' => 'required',
@@ -251,8 +253,8 @@ class DoctorController extends Controller
             'contact_number' => 'required',
             'hospital_name' => 'required',
             'hospital_address' => 'required',
-            'hosptial_starts_at' => 'required',
-            'hospital_ends_at' => 'required',
+            'hosptial_starts_at' => 'required', // Start Time is in 12 Hour Format
+            'hospital_ends_at' => 'required', // End Time is in 12 Hour Format
             'consultation_fees' => 'required',
         );
 
@@ -267,7 +269,56 @@ class DoctorController extends Controller
 
                 $doctorsModel = new DoctorsModel(); // Initialize DoctorsModel()
 
-                // Doctors Data that need to be inserted into the database table named 'users'
+                // Validate time format and this is how the format must be when we accept the start and end time from the frontend
+                $validFormat = function ($time) {
+                    return (bool) preg_match('/^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/i', $time);
+                };
+
+                if (!$validFormat($data['hosptial_starts_at']) || !$validFormat($data['hospital_ends_at'])) {
+                    return json_encode([
+                        'success' => false, 
+                        'error' => [
+                            'error_code' => 'E006',
+                            'error_message' => 'Invalid time format. Please enter times in the format HH:MM AM/PM.'
+                            ]
+                        ]
+                    );
+                }   
+                
+                // Convert the 12 Hour Time to 24 Hour Format 
+                $startTime24HourFormat = Carbon::createFromFormat('h:i A', $data['hosptial_starts_at'])->format('H:i');
+                $endTime24HourFormat  = Carbon::createFromFormat('h:i A', $data['hospital_ends_at'])->format('H:i');
+
+                // Convert times to Carbon objects for comparison
+                $start = Carbon::createFromFormat('H:i', $startTime24HourFormat);
+                $end = Carbon::createFromFormat('H:i', $endTime24HourFormat);
+
+                // Check if end time is greater than start time
+                if ($end->lessThanOrEqualTo($start)) {
+                    return json_encode([
+                        'success' => false, 
+                        'error' => [
+                            'error_code' => 'E005',
+                            'error_message' => 'End time cannot be less than or equal to start time.'
+                            ]
+                        ]
+                    );
+                }
+
+                // Check if there is at least 30 minutes difference between start and end time
+                if ($end->diffInMinutes($start) < 30) {
+                    return json_encode([
+                        'success' => false, 
+                        'error' => [
+                            'error_code' => 'E004',
+                            'error_message' => 'There must be at least 30 minutes difference between start and end time.'
+                            ]
+                        ]
+                    );
+                }
+
+                // If we do not encounter any error in the above calculations then proceed with storing the data into the database
+                // Doctors Data that need to be inserted into the database table named 'doctors'
                 $doctor_data = array(
                     'full_name' => $data['full_name'],
                     'education' => $data['education'],
@@ -277,8 +328,8 @@ class DoctorController extends Controller
                     'profile_image' => (isset($data['profile_image']) && $data['profile_image'] != "") ? $data['profile_image'] : null,
                     'hospital_name' => $data['hospital_name'],
                     'hospital_address' => $data['hospital_address'],
-                    'hosptial_starts_at' => $data['hosptial_starts_at'],
-                    'hospital_ends_at' => $data['hospital_ends_at'],
+                    'hosptial_starts_at' => $startTime24HourFormat,
+                    'hospital_ends_at' => $endTime24HourFormat,
                     'consultation_fees' => $data['consultation_fees'],
                     'is_profile_completed' => 1,
                 );
@@ -294,14 +345,15 @@ class DoctorController extends Controller
 
                     //Token Payload Data 
                     $payload = array(
-                        'doctor_info' => $doctor_info
+                        'doctor_info' => $doctor_info,
+                        'user_role' => 'doctor' // This defines the type of user who is logging into application
                     );
 
                     // Generate Token
                     $token = TokenHelper::generateToken($payload);
 
-                    // Add this generated token into user_info array
-                    $user_info['token'] = $token;
+                    // Add this generated token into doctor_info array
+                    $doctor_info['token'] = $token;
 
                     $result = array(
                         'success' => true,
@@ -349,5 +401,3 @@ class DoctorController extends Controller
         return json_encode($result);
     }
 }
-
-?>

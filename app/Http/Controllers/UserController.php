@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DoctorAppointmentsModel;
+use App\Models\DoctorsModel;
 use App\Models\UsersModel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use App\Helpers\TokenHelper;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 
 class UserController extends Controller
@@ -181,7 +184,8 @@ class UserController extends Controller
 
                     //Token Payload Data 
                     $payload = array(
-                        'user_info' => $user_info
+                        'user_info' => $user_info,
+                        'user_role' => 'patient' // This defines the type of user who is logging into application
                     );
 
                     // Generate Token
@@ -282,7 +286,8 @@ class UserController extends Controller
 
                     //Token Payload Data 
                     $payload = array(
-                        'user_info' => $user_info
+                        'user_info' => $user_info,
+                        'user_role' => 'patient' // This defines the type of user who is logging into application
                     );
 
                     // Generate Token
@@ -324,6 +329,295 @@ class UserController extends Controller
             }
         } 
         // If validation fails, return with an error saying some fields are mandatory that need to be filled before creation of new user
+        else {
+            $result = array(
+                'success' => false,
+                'error' => array(
+                    'error_code' => 'E001',
+                    'error_message' => $validation->errors()
+                )
+            );
+        }
+
+        return json_encode($result);
+    }
+
+    public function doctorsList(Request $request)
+    {
+        try {
+            $doctorsModel = new DoctorsModel(); //initiate clientModel
+
+            // Fetch Doctors List
+            $doctors_list = $doctorsModel->get_doctors(); //get all active client list 
+
+            // If count of doctors list is more then 0 and not empty then send the doctors list else return with an empty array
+            if (count($doctors_list) > 0 && !empty($doctors_list)) {
+                $response = array(
+                    'success' => true,
+                    'data' => array(
+                        'doctors_list' => $doctors_list,
+                    ),
+                );
+            } else {
+                $response = array(
+                    'success' => false,
+                    'data' => array(
+                        'doctors_list' => [],
+                    ),
+                    'error' => array(
+                        'error_code' => 'E002',
+                        'error_message' => 'Sorry, no doctors found.',
+                    ),
+                );
+            }
+        } catch (\Exception $e) {
+            Log::error('Exception Fetching All Doctors');
+            Log::error($e->getMessage());
+
+            $response = array(
+                'success' => false,
+                'error' => array(
+                    'error_code' => 'E001',
+                    'error_message' => 'Error Fetching All Doctors List',
+                ),
+                'data' => array(),
+            );
+        }
+        return json_encode($response);
+    }
+
+    public function doctorProfileWithTimeSlots(Request $request)
+    {
+        // First get all the data sent from the client side
+        $data = $request->all();
+
+        // Next, validate these fields since these fields are mandatory 
+        $rules = array(
+            'doctor_id' => 'required',
+            'current_date' => 'required|date'
+        );
+
+        // Validate the fields
+        $validation = Validator::make($data, $rules);
+
+        // Now, check whether validation fails or validate it as true
+        if (!$validation->fails()) {
+            try {
+                // Begin transaction
+                DB::beginTransaction();
+
+                $doctorsModel = new DoctorsModel(); // Initialize DoctorsModel()
+                $doctorAppointmentsModel = new DoctorAppointmentsModel(); // Initialize DoctorAppointmentsModel()
+
+                $doctor_id = $data['doctor_id'];
+                $current_date = date('Y-m-d', strtotime($data['current_date'])); // Current date 
+                
+                // Retrieve doctor information requested by the patient
+                $doctor_info = $doctorsModel->get_doctor(['doctor_id' => $doctor_id]);
+
+                if (isset($doctor_info) && !empty($doctor_info)) {
+                    
+                    // Generate time slots
+                    $time_slots = []; // Initialize time_slots with an empty array
+                    $booked_slots = []; // Initialize booked_slots with an empty array
+                    $time_slots_with_booking_status = []; // Initialize time_slots_with_booking_status with an empty array
+
+                    // Convert start and end time to Carbon objects
+                    $starts_at = Carbon::today()->createFromFormat('H:i:s', $doctor_info['hosptial_starts_at']);
+                    $ends_at = Carbon::today()->createFromFormat('H:i:s', $doctor_info['hospital_ends_at']);
+
+                    // Iterate through time range and add 30-minute time slots
+                    while ($starts_at < $ends_at) {
+                        $time_slots[] = $starts_at->format('h:i A');
+                        $starts_at->addMinutes(30);
+                    }
+
+                    $booked_slots_response = $doctorAppointmentsModel->get_doctor_appointments(['doctor_id' => $doctor_id, 'appointment_date' => $current_date]);
+
+                    if(isset($booked_slots_response) && !empty($booked_slots_response)){
+
+                        // Convert booked time slots to 12-hour format with AM/PM suffix
+                        foreach ($booked_slots_response as $booked_slot) {
+                            $booked_slots[] = Carbon::createFromFormat('H:i:s', $booked_slot['appointment_slot'])->format('h:i A');
+                        }
+                    } 
+
+                    // Return doctor information along with all time slots and their booking status
+                    foreach ($time_slots as $time_slot) {
+                        $is_booked = in_array($time_slot, $booked_slots);
+                        $time_slots_with_booking_status[] = [
+                            'time' => $time_slot,
+                            'is_booked' => $is_booked
+                        ];
+                    }
+
+                    DB::commit();
+
+                    $result = array(
+                        'success' => true,
+                        'data' => array(
+                            'doctor_info' => $doctor_info,
+                            'time_slots' => $time_slots_with_booking_status
+                        )
+                    );
+                } else {
+                    DB::rollback();
+                    $result = array(
+                        'success' => false,
+                        'error' => array(
+                            'error_code' => 'E003',
+                            'error_message' => 'Doctor not found.'
+                        )
+                    );
+                }
+            } catch (\Exception $e) {
+                DB::rollBack();
+                Log::info('Exception encountered while retrieving doctor profile along with time slots.');
+                Log::info($e->getMessage());
+                Log::info($e);
+
+                $result = array(
+                    'success' => false,
+                    'error' => array(
+                        'error_code' => 'E002',
+                        'error_message' => 'Error fetching doctor profile with time slots.'
+                    )
+                );
+            }
+        }
+        // If validation fails, return with an error saying some fields are mandatory that need to be sent before fetching the doctor profile with time slots
+        else {
+            $result = array(
+                'success' => false,
+                'error' => array(
+                    'error_code' => 'E001',
+                    'error_message' => $validation->errors()
+                )
+            );
+        }
+
+        return json_encode($result);
+    }
+
+    public function confirmSlotSelection(Request $request)
+    {
+        // First get all the data sent from the client side
+        $data = $request->all();
+
+        // Next, validate these fields since these fields are mandatory 
+        $rules = array(
+            'doctor_id' => 'required',
+            'patient_id' => 'required',
+            'appointment_slots' => 'required',
+            'appointment_date' => 'required|date'
+        );
+
+        // Validate the fields
+        $validation = Validator::make($data, $rules);
+
+        // Now, check whether validation fails or validate it as true
+        if (!$validation->fails()) {
+            try {
+                // Begin transaction
+                DB::beginTransaction();
+
+                $doctorsModel = new DoctorsModel(); // Initialize DoctorsModel()
+                $usersModel = new UsersModel(); // Initialize UsersModel() which indicates patients
+                $doctorAppointmentsModel = new DoctorAppointmentsModel(); // Initialize DoctorAppointmentsModel()
+
+                $does_doctor_exists = $doctorsModel->doctor_exists(['doctor_id' => $data['doctor_id']]);
+                $does_patient_exists = $usersModel->user_exists(['user_id' => $data['patient_id']]);
+
+                if(isset($does_doctor_exists) && isset($does_patient_exists) && $does_doctor_exists == true && $does_patient_exists == true)
+                {
+                    if(isset($data['appointment_slots']) && !empty($data['appointment_slots'])){
+
+                        $selected_time_slots = $data['appointment_slots'];
+
+                        // Define the validFormat function to validate time format
+                        $validFormat = function ($time) {
+                            return (bool) preg_match('/^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/i', $time);
+                        };
+
+                        // Validate each selected time slot format
+                        $all_slots_are_valid = true;
+                        foreach ($selected_time_slots as $selected_time_slot) {
+                            if (!$validFormat($selected_time_slot)) {
+                                $all_slots_are_valid = false;
+                                break;
+                            }
+                        }
+
+                        if ($all_slots_are_valid) {
+
+                            // Iterate through each selected time slot
+                            foreach ($selected_time_slots as $selected_time_slot) {
+                                
+                                // Convert the 12 Hour Time to 24 Hour Format 
+                                $appointment_slot = Carbon::createFromFormat('h:i A', $selected_time_slot)->format('H:i:s');
+
+                                // Check if the selected time slot is already booked
+                                $is_already_booked = $doctorAppointmentsModel->appointment_exists(['doctor_id' => $data['doctor_id'], 'appointment_slot' => $appointment_slot, 'appointment_date' => $data['appointment_date']]);
+
+                                // If the time slot is not already booked, update the database to mark it as booked
+                                if (!$is_already_booked) {
+                                    $doctorAppointmentsModel->create_doctor_appointment(['doctor_id' => $data['doctor_id'], 'patient_id' => $data['patient_id'], 'appointment_slot' => $appointment_slot, 'appointment_date' => $data['appointment_date']]);
+                                }
+                            }
+
+                            // Commit The Database Transactions
+                            DB::commit();
+
+                            $result = array(
+                                'success' => true,
+                                'message' => "Selected time slots successfully booked."
+                            );
+                        } else {
+                            DB::rollBack();
+                            $result = array(
+                                'success' => false,
+                                'error' => array(
+                                    'error_code' => 'E005',
+                                    'error_message' => 'Error: Time slots are not in a valid format.'
+                                )
+                            );
+                        }
+                    } else {
+                        DB::rollBack();
+                        $result = array(
+                            'success' => false,
+                            'error' => array(
+                                'error_code' => 'E004',
+                                'error_message' => 'Error: Appointment slots are empty or improperly formatted.'
+                            )
+                        );
+                    }
+                } else {
+                    DB::rollBack();
+                    $result = array(
+                        'success' => false,
+                        'error' => array(
+                            'error_code' => 'E003',
+                            'error_message' => 'An error occurred: Doctor or user does not exist.'
+                        )
+                    );
+                }
+            } catch (\Exception $e) {
+                DB::rollBack();
+                Log::info('Exception encountered while confirming/booking the selected time slot.');
+                Log::info($e->getMessage());
+                Log::info($e);
+        
+                $result = array(
+                    'success' => false,
+                    'error' => array(
+                        'error_code' => 'E002',
+                        'error_message' => 'Error encountered while confirming/booking the selected time slot.'
+                    )
+                );
+            }
+        }
+        // If validation fails, return with an error saying some fields are mandatory that need to be sent before fetching the doctor profile with time slots
         else {
             $result = array(
                 'success' => false,

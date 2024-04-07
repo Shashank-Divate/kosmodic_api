@@ -2,6 +2,9 @@
 
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\DoctorController;
+use App\Http\Middleware\AutenticatePatient;
+use App\Http\Middleware\AuthenticateApiToken;
+use App\Http\Middleware\AuthenticateDoctor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
@@ -39,3 +42,23 @@ Route::post('/user_update_profile', [UserController::class, 'userUpdateProfile']
 Route::post('/doctor_login', [DoctorController::class, 'doctorLogin']);
 Route::post('/verify_doctor_otp', [DoctorController::class, 'verifyDoctorOTP']);
 Route::post('/doctor_update_profile', [DoctorController::class, 'doctorUpdateProfile']);
+
+//Token verify middleware
+Route::middleware([AuthenticateApiToken::class])->group(function () {
+
+    //Middleware to verify whether the role is doctor and only the doctors can access these routes 
+    Route::middleware([AuthenticateDoctor::class])->group(function () {
+
+        // Routes:: Doctor Routes
+        
+    });
+
+    //Middleware to verify whether the role is patient and only the patient can access these routes 
+    Route::middleware([AutenticatePatient::class])->group(function(){
+
+        // Routes:: Patient Routes
+        Route::get('/doctors_list', [UserController::class, 'doctorsList']);
+        Route::get('/doctor_profile_with_time_slots', [UserController::class, 'doctorProfileWithTimeSlots']);
+        Route::post('/confirm_slot_selection', [UserController::class, 'confirmSlotSelection']);
+    });
+});
