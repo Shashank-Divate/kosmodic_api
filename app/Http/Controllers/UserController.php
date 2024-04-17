@@ -429,7 +429,7 @@ class UserController extends Controller
                     // Iterate through time range and add 30-minute time slots
                     while ($starts_at < $ends_at) {
                         $time_slots[] = $starts_at->format('h:i A');
-                        $starts_at->addMinutes(30);
+                        $starts_at->addMinutes(15);
                     }
 
                     $booked_slots_response = $doctorAppointmentsModel->get_doctor_appointments(['doctor_id' => $doctor_id, 'appointment_date' => $current_date]);
@@ -524,6 +524,7 @@ class UserController extends Controller
                 $doctorsModel = new DoctorsModel(); // Initialize DoctorsModel()
                 $usersModel = new UsersModel(); // Initialize UsersModel() which indicates patients
                 $doctorAppointmentsModel = new DoctorAppointmentsModel(); // Initialize DoctorAppointmentsModel()
+                $appointment_date = date('Y-m-d', strtotime($data['appointment_date'])); // Current date 
 
                 $does_doctor_exists = $doctorsModel->doctor_exists(['doctor_id' => $data['doctor_id']]);
                 $does_patient_exists = $usersModel->user_exists(['user_id' => $data['patient_id']]);
@@ -557,11 +558,11 @@ class UserController extends Controller
                                 $appointment_slot = Carbon::createFromFormat('h:i A', $selected_time_slot)->format('H:i:s');
 
                                 // Check if the selected time slot is already booked
-                                $is_already_booked = $doctorAppointmentsModel->appointment_exists(['doctor_id' => $data['doctor_id'], 'appointment_slot' => $appointment_slot, 'appointment_date' => $data['appointment_date']]);
+                                $is_already_booked = $doctorAppointmentsModel->appointment_exists(['doctor_id' => $data['doctor_id'], 'appointment_slot' => $appointment_slot, 'appointment_date' =>$appointment_date ]);
 
                                 // If the time slot is not already booked, update the database to mark it as booked
                                 if (!$is_already_booked) {
-                                    $doctorAppointmentsModel->create_doctor_appointment(['doctor_id' => $data['doctor_id'], 'patient_id' => $data['patient_id'], 'appointment_slot' => $appointment_slot, 'appointment_date' => $data['appointment_date']]);
+                                    $doctorAppointmentsModel->create_doctor_appointment(['doctor_id' => $data['doctor_id'], 'patient_id' => $data['patient_id'], 'appointment_slot' => $appointment_slot, 'appointment_date' => $appointment_date]);
                                 }
                             }
 
